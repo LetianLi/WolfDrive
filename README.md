@@ -7,9 +7,9 @@ This project optimizes for max power movement and smooths movement by using the 
 
 This project uses roadrunner's localization and contains an incomplete copy of their [quickstart](https://github.com/acmerobotics/road-runner-quickstart/tree/master).
 
-Ideally copy the WolfDrive folder into your existing roadrunner based repo to test, otherwise proceed to roadrunner tuning.
+If you plan to use the rest of roadrunner for autonomous, then copy just the TeamCode/java/.../WolfDrive folder into your existing roadrunner based repo to test, otherwise proceed to roadrunner tuning.
 
-## Roadrunner Tuning process (for running as a standalone project [not recommended])
+## Roadrunner Tuning process (Not recommended: only for running as a standalone project)
 1. Setup MecanumDrive with your motor names and reverse motors as necessary. Set the IMU orientation here as well.
 2. Choose a localizer (wheel encoders by default): DriveLocalizer, TwoDeadWheelLocalizer, or ThreeDeadWheelLocalizer
 3. Setup the respective localizer class with your odometry encoder names (if using dead wheel)
@@ -37,4 +37,4 @@ Make sure you have enough space in the drive direction as the robot will move in
 ### 3. Use the WolfDrive class in your code
 1. Copy the Standalone WolfDrive folder into your code
 2. Instantiate the class
-3. Remember to updatePoseEstimate, feed the pose into trackPosition(), and then driveWithCorrection().
+3. Remember to updatePoseEstimate, feed the pose into trackPosition(), and then driveWithCorrection(). See WolfDriveTest for example.
