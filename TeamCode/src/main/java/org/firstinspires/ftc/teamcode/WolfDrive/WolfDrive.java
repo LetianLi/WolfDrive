@@ -7,15 +7,16 @@ import com.acmerobotics.roadrunner.Vector2d;
 import org.firstinspires.ftc.teamcode.MecanumDrive;
 
 public class WolfDrive {
-    public static double maxVelocityX = 50; // max positive straight velocity. TODO: Record using MaxVelStraightTest.
-    public static double maxVelocityY = 50; // max positive sideways velocity. TODO: Record using MaxVelStrafeTest.
-    public static double centripetalWeighting = 0.00001; // TODO: adjust by trial and error for how much smoothing you need. Wolfpack calculates it but I can't be bothered.
+    public static double maxVelocityX = 77; // max positive straight velocity. TODO: Record using MaxVelStraightTest.
+    public static double maxVelocityY = 51; // max positive sideways velocity. TODO: Record using MaxVelStrafeTest.
+    public static double centripetalWeighting = 0.001; // TODO: adjust by trial and error for how much smoothing you need. Wolfpack calculates it but I can't be bothered.
     public static double dashboardVectorScale = 1;
 
     private Vector2d leftFrontWheelForceVector;  // these vectors should not change during the match,
     private Vector2d leftBackWheelForceVector;   // but are left non-final for modifying maxVelocities
     private Vector2d rightBackWheelForceVector;
     private Vector2d rightFrontWheelForceVector;
+    private static double smallestWheelForceMagnitude; // used to scale all force vectors down to what the weakest wheel force can output at full power
 
     public Vector2d centripetalCircleCenterDrawn = null;
     public Vector2d centripetalCircleRadiusDrawn = null;
@@ -38,68 +39,74 @@ public class WolfDrive {
         leftBackWheelForceVector = new Vector2d(maxVelocityX, maxVelocityY);
         rightBackWheelForceVector = new Vector2d(maxVelocityX, -maxVelocityY);
         rightFrontWheelForceVector = new Vector2d(maxVelocityX, maxVelocityY);
+        smallestWheelForceMagnitude = getAbsMin(leftBackWheelForceVector.norm(), leftFrontWheelForceVector.norm(), rightBackWheelForceVector.norm(), rightFrontWheelForceVector.norm());
     }
 
     /**
      * Sets wheel powers depending on given robot drive direction
      */
     public void setDrivePowers(PoseVelocity2d powers) {
-        // Rotate wheel force vectors to drive direction
-        double driveDirection = powers.linearVel.angleCast().log();
+        // Calculate starting power for forwards, using linear velocity and scaling down to weakest wheel
         double drivePower = powers.linearVel.norm();
-        Vector2d newLeftFrontWheelForceVector = leftFrontWheelForceVector.angleCast().plus(-driveDirection).vec().times(drivePower);
-        Vector2d newLeftBackWheelForceVector = leftBackWheelForceVector.angleCast().plus(-driveDirection).vec().times(drivePower);
-        Vector2d newRightBackWheelForceVector = rightBackWheelForceVector.angleCast().plus(-driveDirection).vec().times(drivePower);
-        Vector2d newRightFrontWheelForceVector = rightFrontWheelForceVector.angleCast().plus(-driveDirection).vec().times(drivePower);
-        double leftFrontPower = drivePower;
-        double leftBackPower = drivePower;
-        double rightBackPower = drivePower;
-        double rightFrontPower = drivePower;
+        double leftFrontPower = drivePower * smallestWheelForceMagnitude / leftFrontWheelForceVector.norm();
+        double leftBackPower = drivePower * smallestWheelForceMagnitude / leftBackWheelForceVector.norm();
+        double rightBackPower = drivePower * smallestWheelForceMagnitude / rightBackWheelForceVector.norm();
+        double rightFrontPower = drivePower * smallestWheelForceMagnitude / rightFrontWheelForceVector.norm();
+        // Rotate wheel force vectors and scale with drive power
+        double driveDirection = powers.linearVel.angleCast().log();
+        Vector2d newLeftFrontWheelForceVector = leftFrontWheelForceVector.angleCast().plus(-driveDirection).vec().times(leftFrontPower);
+        Vector2d newLeftBackWheelForceVector = leftBackWheelForceVector.angleCast().plus(-driveDirection).vec().times(leftBackPower);
+        Vector2d newRightBackWheelForceVector = rightBackWheelForceVector.angleCast().plus(-driveDirection).vec().times(rightBackPower);
+        Vector2d newRightFrontWheelForceVector = rightFrontWheelForceVector.angleCast().plus(-driveDirection).vec().times(rightFrontPower);
 
-        // scale down extraneous strafe
-        double frontNegScale = -Math.signum(newLeftFrontWheelForceVector.y * newRightFrontWheelForceVector.y);
-        if (Math.abs(newLeftFrontWheelForceVector.y) >= Math.abs(newRightFrontWheelForceVector.y)) {
-            double pairedY = newRightFrontWheelForceVector.y;
-            double selfY = newLeftFrontWheelForceVector.y;
-            double factor = frontNegScale * Math.abs(pairedY / selfY);
-            if (!Double.isFinite(factor)) factor = 0;
-            newLeftFrontWheelForceVector = newLeftFrontWheelForceVector.times(factor);
-            leftFrontPower = leftFrontPower * factor;
-        } else {
-            double pairedY = newLeftFrontWheelForceVector.y;
-            double selfY = newRightFrontWheelForceVector.y;
-            double factor = frontNegScale * Math.abs(pairedY / selfY);
-            if (!Double.isFinite(factor)) factor = 0;
-            newRightFrontWheelForceVector = newRightFrontWheelForceVector.times(factor);
-            rightFrontPower = rightFrontPower * factor;
-        }
-        double backNegScale = -Math.signum(newLeftBackWheelForceVector.y * newRightBackWheelForceVector.y);
-        if (Math.abs(newLeftBackWheelForceVector.y) > Math.abs(newRightBackWheelForceVector.y)) {
-            double pairedY = newRightBackWheelForceVector.y;
-            double selfY = newLeftBackWheelForceVector.y;
-            double factor = backNegScale * Math.abs(pairedY / selfY);
-            if (!Double.isFinite(factor)) factor = 0;
-            newLeftBackWheelForceVector = newLeftBackWheelForceVector.times(factor);
-            leftBackPower = leftBackPower * factor;
-        } else {
-            double pairedY = newLeftBackWheelForceVector.y;
-            double selfY = newRightBackWheelForceVector.y;
-            double factor = backNegScale * Math.abs(pairedY / selfY);
-            if (!Double.isFinite(factor)) factor = 0;
-            newRightBackWheelForceVector = newRightBackWheelForceVector.times(factor);
-            rightBackPower = rightBackPower * factor;
-        }
+        System.out.println(String.format("(%+7.2f, %7.2f)  (%+7.2f, %7.2f)", newLeftFrontWheelForceVector.x, newLeftFrontWheelForceVector.y, newRightFrontWheelForceVector.x, newRightFrontWheelForceVector.y));
+        System.out.println(String.format("(%+7.2f, %7.2f)  (%+7.2f, %7.2f)", newLeftBackWheelForceVector.x, newLeftBackWheelForceVector.y, newRightBackWheelForceVector.x, newRightBackWheelForceVector.y));
 
-        // Correct signs if majority is negative x
-        if (newLeftFrontWheelForceVector.x + newLeftBackWheelForceVector.x + newRightBackWheelForceVector.x + newRightFrontWheelForceVector.x < 0) {
-            newLeftFrontWheelForceVector = newLeftFrontWheelForceVector.times(-1);
-            newLeftBackWheelForceVector = newLeftBackWheelForceVector.times(-1);
-            newRightBackWheelForceVector = newRightBackWheelForceVector.times(-1);
-            newRightFrontWheelForceVector = newRightFrontWheelForceVector.times(-1);
-            leftFrontPower = -leftFrontPower;
-            leftBackPower = -leftBackPower;
-            rightBackPower = -rightBackPower;
-            rightFrontPower = -rightFrontPower;
+        // Find vectors with the most X value
+        if (Math.abs(newLeftFrontWheelForceVector.x) >= Math.abs(newRightFrontWheelForceVector.x)) { // leftFront and rightBack contribute most to drive direction
+            // Reverse primary vectors if necessary
+            if (newLeftFrontWheelForceVector.x < 0) {
+                newLeftFrontWheelForceVector = newLeftFrontWheelForceVector.times(-1);
+                leftFrontPower *= -1;
+                newRightBackWheelForceVector = newRightBackWheelForceVector.times(-1);
+                rightBackPower *= -1;
+            }
+
+            double extraneousY = newLeftFrontWheelForceVector.y;
+            if (newRightFrontWheelForceVector.y != 0 && newLeftBackWheelForceVector.y != extraneousY) { // Make secondary vector y's cancel out primary's
+                double rightFrontFactor = -extraneousY / newRightFrontWheelForceVector.y;
+                newRightFrontWheelForceVector = newRightFrontWheelForceVector.times(rightFrontFactor);
+                rightFrontPower *= rightFrontFactor;
+                newLeftBackWheelForceVector = newLeftBackWheelForceVector.times(rightFrontFactor);
+                leftBackPower *= rightFrontFactor;
+            } else if (newLeftBackWheelForceVector.x < 0) { // Reverse secondary vectors if necessary
+                newLeftBackWheelForceVector = newLeftBackWheelForceVector.times(-1);
+                leftBackPower *= -1;
+                newRightFrontWheelForceVector = newRightFrontWheelForceVector.times(-1);
+                rightFrontPower *= -1;
+            }
+        } else { // rightFront and leftBack contribute most to drive direction
+            // Reverse primary vectors if necessary
+            if (newRightFrontWheelForceVector.x < 0) {
+                newRightFrontWheelForceVector = newRightFrontWheelForceVector.times(-1);
+                rightFrontPower *= -1;
+                newLeftBackWheelForceVector = newLeftBackWheelForceVector.times(-1);
+                leftBackPower *= -1;
+            }
+
+            double extraneousY = newRightFrontWheelForceVector.y;
+            if (newLeftFrontWheelForceVector.y != 0 && newRightBackWheelForceVector.y != extraneousY) { // Make secondary vector y's cancel out primary's
+                double leftFrontFactor = -extraneousY / newLeftFrontWheelForceVector.y;
+                newLeftFrontWheelForceVector = newLeftFrontWheelForceVector.times(leftFrontFactor);
+                leftFrontPower *= leftFrontFactor;
+                newRightBackWheelForceVector = newRightBackWheelForceVector.times(leftFrontFactor);
+                rightBackPower *= leftFrontFactor;
+            } else if (newRightBackWheelForceVector.x < 0) { // Reverse secondary vectors if necessary
+                newRightBackWheelForceVector = newRightBackWheelForceVector.times(-1);
+                rightBackPower *= -1;
+                newLeftFrontWheelForceVector = newLeftFrontWheelForceVector.times(-1);
+                leftFrontPower *= -1;
+            }
         }
 
         // consider turn power
@@ -217,6 +224,17 @@ public class WolfDrive {
             max = Math.max(max, Math.abs(value));
         }
         return max;
+    }
+
+    /**
+     * Returns the smallest magnitude of the given values
+     */
+    private static double getAbsMin(double... values) {
+        double min = Double.MAX_VALUE;
+        for (double value : values) {
+            min = Math.min(min, Math.abs(value));
+        }
+        return min;
     }
 
     public String formatVector(Vector2d vector) {
